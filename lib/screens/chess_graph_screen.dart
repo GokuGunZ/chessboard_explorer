@@ -134,7 +134,7 @@ class ChessGraphScreenState extends State<ChessGraphScreen> {
   Widget build(BuildContext context) {
     return InteractiveViewer(
       constrained: false,
-      boundaryMargin: const EdgeInsets.all(100),
+      boundaryMargin: const EdgeInsets.all(1000),
       minScale: 0.01,
       maxScale: 5.0,
       child: GraphView(

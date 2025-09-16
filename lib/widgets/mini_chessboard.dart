@@ -47,10 +47,13 @@ class MiniChessboard extends StatelessWidget {
                 height: squareSize,
                 color: isLightSquare ? Colors.brown[200] : Colors.brown[700],
                 child: piece != null
-                    ? Center(
-                        child: Text(
-                          piece,
-                          style: TextStyle(fontSize: squareSize * 0.8),
+                    ? Padding(
+                        padding: const EdgeInsets.only(top: 1),
+                        child: Center(
+                          child: Text(
+                            piece,
+                            style: TextStyle(fontSize: squareSize * 0.8),
+                          ),
                         ),
                       )
                     : null,
