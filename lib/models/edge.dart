@@ -6,7 +6,6 @@ class Edge {
   final String moveSan; // es. "e4"
   final String moveColor;
   final Map<String, dynamic> metadata;
-
   Edge({
     required this.fromNodeId,
     required this.toNodeId,

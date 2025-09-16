@@ -1,19 +1,19 @@
 import 'package:chessboard_explorer/models/chess_graph.dart';
 import 'package:chessboard_explorer/models/position_node.dart';
+import 'package:chessboard_explorer/widgets/mini_chessboard.dart'; // nuovo widget
 import 'package:flutter/material.dart';
 import 'package:graphview/GraphView.dart';
-import 'package:flutter_chess_board/flutter_chess_board.dart';
 
 class ChessGraphScreen extends StatefulWidget {
   final ChessGraph graph;
-  final ChessBoardController mainController;
   final Function(PositionNode) onNodeTap;
+  final String? selectedNodeId; // nodo attualmente selezionato
 
   const ChessGraphScreen({
     super.key,
     required this.graph,
-    required this.mainController,
     required this.onNodeTap,
+    this.selectedNodeId,
   });
 
   @override
@@ -32,7 +32,7 @@ class ChessGraphScreenState extends State<ChessGraphScreen> {
       ..siblingSeparation = 70
       ..levelSeparation = 100
       ..subtreeSeparation = 30
-      ..orientation = BuchheimWalkerConfiguration.ORIENTATION_TOP_BOTTOM;
+      ..orientation = BuchheimWalkerConfiguration.ORIENTATION_LEFT_RIGHT;
 
     nodeWidgets = {};
     _buildGraph();
@@ -43,24 +43,63 @@ class ChessGraphScreenState extends State<ChessGraphScreen> {
     graphView.nodes.clear();
     graphView.edges.clear();
 
-    // Creiamo un Node per ogni PositionNode
+    final selectedNodeId = _selectedNodeId ?? widget.graph.rootNodeId;
+    final currentNode =
+        widget.graph.getNode(selectedNodeId) ??
+        widget.graph.getNode(widget.graph.rootNodeId)!;
+
+    // Vicini diretti
+    Set<String> nearNodes = {};
+    nearNodes.addAll(currentNode.outgoingEdges.map((e) => e.toNodeId));
+    nearNodes.addAll(currentNode.incomingEdges.map((e) => e.fromNodeId));
+
     widget.graph.nodes.forEach((id, pNode) {
-      final nodeWidget = GestureDetector(
-        onTap: () => widget.onNodeTap(pNode),
-        child: Container(
-          width: 60,
-          height: 60,
+      Widget nodeWidget;
+
+      // Nodo selezionato
+      if (pNode.id == selectedNodeId) {
+        nodeWidget = MiniChessboard(
+          fen: pNode.fen,
+          size: 120,
+          highlightColor: Colors.deepPurpleAccent.withOpacity(0.5),
+        );
+      }
+      // Vicini o nodo root
+      else if (nearNodes.contains(pNode.id) ||
+          pNode.id == widget.graph.rootNodeId) {
+        nodeWidget = MiniChessboard(fen: pNode.fen, size: 65);
+      }
+      // Nodi vicini
+      else if (pNode.depth < currentNode.depth + 1 &&
+          pNode.depth > currentNode.depth - 1) {
+        nodeWidget = MiniChessboard(fen: pNode.fen, size: 50);
+      }
+      // Nodo lontano → mostra solo mossa
+      else {
+        String moveLabel = pNode.incomingEdges.isNotEmpty
+            ? pNode.incomingEdges.last.moveSan
+            : "";
+        nodeWidget = Container(
+          width: 40,
+          height: 40,
           decoration: BoxDecoration(
-            border: Border.all(color: Colors.black),
+            color: Colors.grey.shade300,
             borderRadius: BorderRadius.circular(4),
+            border: Border.all(color: Colors.black),
           ),
           child: Center(
-            child: Text("${pNode.depth}", style: const TextStyle(fontSize: 12)),
+            child: Text(moveLabel, style: const TextStyle(fontSize: 12)),
           ),
-        ),
+        );
+      }
+
+      // Gesture per selezione
+      nodeWidget = GestureDetector(
+        onTap: () => widget.onNodeTap(pNode),
+        child: nodeWidget,
       );
 
-      nodeWidgets[id] = Node(nodeWidget);
+      nodeWidgets[pNode.id] = Node(nodeWidget);
     });
 
     // Aggiungiamo nodi al Graph
@@ -77,6 +116,12 @@ class ChessGraphScreenState extends State<ChessGraphScreen> {
         graphView.addEdge(fromNode, toNode, paint: paint);
       }
     });
+  }
+
+  String? _selectedNodeId;
+
+  void updateSelectedNode(String nodeId) {
+    _selectedNodeId = nodeId;
   }
 
   void rebuildGraph() {
@@ -96,7 +141,7 @@ class ChessGraphScreenState extends State<ChessGraphScreen> {
         graph: graphView,
         algorithm: BuchheimWalkerAlgorithm(builder, TreeEdgeRenderer(builder)),
         builder: (Node node) {
-          return node as Widget;
+          return node.key as Widget;
         },
       ),
     );

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:ui' as UI;
 import 'package:flutter_chess_board/flutter_chess_board.dart';
 
 import 'package:chessboard_explorer/models/chess_graph.dart';
@@ -26,7 +27,7 @@ class _ChessBoardScreenState extends State<ChessBoardScreen> {
     super.initState();
     controller = ChessBoardController();
 
-    // Usa il grafo passato da main (unico grafo!)
+    // Nodo root come punto di partenza
     currentNode = widget.graph.getNode(widget.graph.rootNodeId)!;
     controller.loadFen(currentNode.fen);
   }
@@ -40,6 +41,8 @@ class _ChessBoardScreenState extends State<ChessBoardScreen> {
         currentNode = widget.graph.getNode(newNodeId)!;
       });
 
+      // 🔥 ricostruisce il grafo con il nuovo selectedNodeId
+      graphKey.currentState?.updateSelectedNode(currentNode.id);
       graphKey.currentState?.rebuildGraph();
 
       // Persiste su Hive come JSON
@@ -58,32 +61,52 @@ class _ChessBoardScreenState extends State<ChessBoardScreen> {
     setState(() {
       currentNode = tappedNode;
     });
+
+    // 🔥 aggiorna la vista grafo
+    graphKey.currentState?.updateSelectedNode(currentNode.id);
+    graphKey.currentState?.rebuildGraph();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text("Chess Explorer")),
-      body: Column(
-        children: [
-          Expanded(
-            flex: 2,
-            child: ChessBoard(
-              controller: controller,
-              enableUserMoves: true,
-              onMove: _onMove,
-            ),
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        gradient: RadialGradient(
+          center: AlignmentGeometry.xy(0, -0.5),
+          colors: [Colors.blueGrey, UI.Color.fromARGB(230, 43, 43, 43)],
+        ),
+      ),
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: AppBar(
+          title: const Text(
+            "Chess Explorer",
+            style: TextStyle(color: Colors.white),
           ),
-          Expanded(
-            flex: 3,
-            child: ChessGraphScreen(
-              key: graphKey,
-              graph: widget.graph,
-              mainController: controller,
-              onNodeTap: _onNodeTap,
+          backgroundColor: Colors.transparent,
+        ),
+        body: Column(
+          children: [
+            Expanded(
+              flex: 2,
+              child: ChessBoard(
+                controller: controller,
+                enableUserMoves: true,
+                onMove: _onMove,
+              ),
             ),
-          ),
-        ],
+            Expanded(
+              flex: 3,
+              child: ChessGraphScreen(
+                key: graphKey,
+                graph: widget.graph,
+                onNodeTap: _onNodeTap,
+                selectedNodeId:
+                    currentNode.id, // 🔥 passiamo il nodo selezionato
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
