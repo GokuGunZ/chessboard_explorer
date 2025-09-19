@@ -1,5 +1,4 @@
-import 'package:chessboard_explorer/models/user_graph_data.dart';
-import 'package:chessboard_explorer/widgets/main_drawer.dart';
+import 'package:chessboard_explorer/models/exploration.dart';
 import 'package:flutter/material.dart';
 import 'dart:ui' as UI;
 import 'package:flutter_chess_board/flutter_chess_board.dart';
@@ -9,22 +8,26 @@ import 'package:chessboard_explorer/models/position_node.dart';
 import 'package:chessboard_explorer/screens/chess_graph_screen.dart';
 import 'package:chessboard_explorer/helper/graph_helper.dart';
 import 'package:chessboard_explorer/helper/local_storage_helper.dart';
+import 'package:chessboard_explorer/models/user_graph_data.dart';
 
-class ChessBoardScreen extends StatefulWidget {
-  final ChessGraph graph;
+// ignore: must_be_immutable
+class ExplorationScreen extends StatefulWidget {
   final UserGraphData userGraphData;
+  Exploration exploration;
+  final String explorationName;
 
-  const ChessBoardScreen({
+  ExplorationScreen({
     super.key,
     required this.userGraphData,
-    required this.graph,
+    required this.exploration,
+    this.explorationName = "Nuova Esplorazione",
   });
 
   @override
-  State<ChessBoardScreen> createState() => _ChessBoardScreenState();
+  State<ExplorationScreen> createState() => _ExplorationScreenState();
 }
 
-class _ChessBoardScreenState extends State<ChessBoardScreen>
+class _ExplorationScreenState extends State<ExplorationScreen>
     with SingleTickerProviderStateMixin {
   bool showGraph = false;
   late AnimationController _controller;
@@ -37,14 +40,16 @@ class _ChessBoardScreenState extends State<ChessBoardScreen>
   void initState() {
     super.initState();
     chessboardController = ChessBoardController();
-    // Nodo root come punto di partenza
-    currentNode = widget.graph.getNode(
-      widget.graph.lastVisitedNodeId ?? widget.graph.rootNodeId,
+
+    currentNode = widget.exploration.graph.getNode(
+      widget.exploration.graph.lastVisitedNodeId ??
+          widget.exploration.graph.rootNodeId,
     )!;
     chessboardController.loadFen(currentNode.fen);
+
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 400),
+      duration: const Duration(milliseconds: 1400),
     );
     _boardHeightFactor = Tween<double>(
       begin: 1.0,
@@ -55,31 +60,54 @@ class _ChessBoardScreenState extends State<ChessBoardScreen>
   void _onMove() async {
     final newFen = chessboardController.getFen();
     try {
-      final newNodeId = applyMoveToGraph(widget.graph, currentNode.id, newFen);
+      // Aggiorna il grafo dell'esplorazione
+      final newNodeId = applyMoveToGraph(
+        widget.exploration.graph,
+        currentNode.id,
+        newFen,
+      );
 
+      widget.exploration.graph.updateLastPosition(newNodeId);
       setState(() {
-        currentNode = widget.graph.getNode(newNodeId)!;
+        currentNode = widget.exploration.graph.getNode(newNodeId)!;
       });
 
-      widget.graph.updateLastPosition(newNodeId);
-      // 🔥 ricostruisce il grafo con il nuovo selectedNodeId
       graphKey.currentState?.updateSelectedNode(currentNode.id);
       graphKey.currentState?.rebuildGraph();
 
-      // Carica UserData esistente
-      final userData = await loadUserData();
+      // Calcola ultime 3 mosse
+      final configurationsHistory = widget.exploration.graph
+          .getConfigurationHistory(currentNode.id);
+      final lastConfigurations = configurationsHistory.length <= 4
+          ? configurationsHistory.reversed.toList()
+          : configurationsHistory.sublist(0, 4).reversed.toList();
 
-      // Aggiorna il grafo globale
-      final updatedGraphData = userData.userGraphData.copyWith(
-        globalGraph: widget.graph,
+      // Aggiorna exploration corrente
+      widget.exploration = widget.exploration.copyWith(
+        graph: widget.exploration.graph,
+        lastConfigurations: lastConfigurations,
       );
 
-      // Per ora aggiorniamo solo il grafo globale, in futuro potremo aggiungere qui anche la logica
-      // di aggiornamento dell’Exploration corrente con le ultime mosse
-      userData.updateWith(userGraphData: updatedGraphData);
+      // Aggiorna il grafo globale fondendo le mosse dell'esplorazione
+      final mergedGlobalGraph = mergeGraphs(
+        widget.userGraphData.globalGraph,
+        widget.exploration.graph,
+      );
+      mergedGlobalGraph.updateLastPosition(newNodeId);
+
+      // Crea nuovo UserGraphData aggiornato
+      widget.userGraphData.updateWith(
+        globalGraph: mergedGlobalGraph,
+        explorations: [
+          ...widget.userGraphData.explorations.where(
+            (e) => e.id != widget.exploration.id,
+          ),
+          widget.exploration,
+        ],
+      );
 
       // Salva su Hive
-      await saveGraph(widget.userGraphData);
+      await saveUserGraphData(widget.userGraphData);
     } catch (e) {
       debugPrint("Errore applyMoveToGraph: $e");
     }
@@ -102,7 +130,6 @@ class _ChessBoardScreenState extends State<ChessBoardScreen>
       currentNode = tappedNode;
     });
 
-    // 🔥 aggiorna la vista grafo
     graphKey.currentState?.updateSelectedNode(currentNode.id);
     graphKey.currentState?.rebuildGraph();
   }
@@ -118,7 +145,6 @@ class _ChessBoardScreenState extends State<ChessBoardScreen>
       ),
       child: Scaffold(
         backgroundColor: Colors.transparent,
-        drawer: MainDrawer(userGraphData: widget.userGraphData),
         appBar: AppBar(
           title: const Text(
             "Chess Explorer",
@@ -149,7 +175,7 @@ class _ChessBoardScreenState extends State<ChessBoardScreen>
                 flex: 3,
                 child: ChessGraphScreen(
                   key: graphKey,
-                  graph: widget.graph,
+                  graph: widget.exploration.graph,
                   onNodeTap: _onNodeTap,
                   selectedNodeId: currentNode.id,
                 ),
@@ -165,5 +191,41 @@ class _ChessBoardScreenState extends State<ChessBoardScreen>
         ),
       ),
     );
+  }
+
+  // Funzione helper per fondere due grafi
+  ChessGraph mergeGraphs(ChessGraph global, ChessGraph exploration) {
+    final mergedNodes = Map<String, PositionNode>.from(global.nodes);
+
+    exploration.nodes.forEach((id, node) {
+      if (!mergedNodes.containsKey(id)) {
+        mergedNodes[id] = node;
+      } else {
+        final existing = mergedNodes[id]!;
+        mergedNodes[id] = PositionNode(
+          id: existing.id,
+          fen: existing.fen,
+          depth: existing.depth,
+          incomingEdges: [
+            ...existing.incomingEdges,
+            ...node.incomingEdges.where(
+              (e) => !existing.incomingEdges.any(
+                (ex) => ex.toNodeId == e.toNodeId,
+              ),
+            ),
+          ],
+          outgoingEdges: [
+            ...existing.outgoingEdges,
+            ...node.outgoingEdges.where(
+              (e) => !existing.outgoingEdges.any(
+                (ex) => ex.toNodeId == e.toNodeId,
+              ),
+            ),
+          ],
+        );
+      }
+    });
+
+    return ChessGraph(nodes: mergedNodes, rootNodeId: global.rootNodeId);
   }
 }

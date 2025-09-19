@@ -29,9 +29,9 @@ class ChessGraphScreenState extends State<ChessGraphScreen> {
   void initState() {
     super.initState();
     builder = BuchheimWalkerConfiguration()
-      ..siblingSeparation = 70
-      ..levelSeparation = 100
-      ..subtreeSeparation = 30
+      ..siblingSeparation = 15
+      ..levelSeparation = 35
+      ..subtreeSeparation = 10
       ..orientation = BuchheimWalkerConfiguration.ORIENTATION_LEFT_RIGHT;
 
     nodeWidgets = {};
@@ -63,6 +63,8 @@ class ChessGraphScreenState extends State<ChessGraphScreen> {
           size: 120,
           highlightColor: Colors.deepPurpleAccent.withOpacity(0.5),
         );
+      } else if (true) {
+        nodeWidget = MiniChessboard(fen: pNode.fen, size: 100);
       }
       // Vicini o nodo root
       else if (nearNodes.contains(pNode.id) ||
@@ -103,7 +105,9 @@ class ChessGraphScreenState extends State<ChessGraphScreen> {
     });
 
     // Aggiungiamo nodi al Graph
-    nodeWidgets.values.forEach((n) => graphView.addNode(n));
+    for (var n in nodeWidgets.values) {
+      graphView.addNode(n);
+    }
 
     // Creiamo archi basati sugli outgoingEdges
     widget.graph.nodes.forEach((id, pNode) {

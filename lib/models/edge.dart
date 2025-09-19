@@ -1,18 +1,26 @@
-// edge.dart
+import 'package:hive/hive.dart';
+
+part 'edge.g.dart';
+
+@HiveType(typeId: 20)
 class Edge {
+  @HiveField(0)
   final String fromNodeId;
+  @HiveField(1)
   final String toNodeId;
-  final String moveUci; // es. "e2e4"
-  final String moveSan; // es. "e4"
+  @HiveField(2)
+  final String moveUci;
+  @HiveField(3)
+  final String moveSan;
+  @HiveField(4)
   final String moveColor;
-  final Map<String, dynamic> metadata;
+
   Edge({
     required this.fromNodeId,
     required this.toNodeId,
     required this.moveUci,
     required this.moveSan,
     required this.moveColor,
-    this.metadata = const {},
   });
 
   Map<String, dynamic> toJson() => {
@@ -21,7 +29,6 @@ class Edge {
     'moveUci': moveUci,
     'moveSan': moveSan,
     'moveColor': moveColor,
-    'metadata': metadata,
   };
 
   factory Edge.fromJson(Map<String, dynamic> json) => Edge(
@@ -30,7 +37,6 @@ class Edge {
     moveUci: json['moveUci'],
     moveSan: json['moveSan'],
     moveColor: json['moveColor'],
-    metadata: Map<String, dynamic>.from(json['metadata'] ?? {}),
   );
 
   Map<String, dynamic> toMap() => {

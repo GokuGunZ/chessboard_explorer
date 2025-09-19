@@ -1,42 +1,106 @@
+import 'package:chessboard_explorer/models/chess_graph.dart';
+import 'package:chessboard_explorer/models/exploration.dart';
+import 'package:chessboard_explorer/models/position_node.dart';
+import 'package:chessboard_explorer/models/user_data.dart';
+import 'package:chessboard_explorer/models/user_graph_data.dart';
 import 'package:hive_flutter/hive_flutter.dart';
-import '../models/chess_graph.dart';
-import '../models/position_node.dart';
 
-// Salva il grafo nella box Hive
-Future<void> saveGraphLocally(ChessGraph graph) async {
-  final box = Hive.box('userGraph');
-  await box.put('graphData', graph.toMap());
-  print("Grafo salvato: ${graph.nodes.length} nodi");
+/// ----------------------
+/// Gestione UserData globale
+/// ----------------------
+
+Future<void> saveUserData(UserData userData) async {
+  final box = await Hive.openBox<UserData>('userData');
+  await box.put('global', userData);
 }
 
-// Carica il grafo dalla box Hive
-ChessGraph loadGraphLocally() {
-  final box = Hive.box('userGraph');
-  final data = box.get('graphData');
+Future<UserData> loadUserData() async {
+  final box = await Hive.openBox<UserData>('userData');
+  final data = box.get('global');
 
-  if (data != null) {
-    // Conversione ricorsiva di tutte le mappe annidate
-    Map<String, dynamic> convertMap(Map m) {
-      final newMap = <String, dynamic>{};
-      m.forEach((key, value) {
-        if (value is Map) {
-          newMap[key.toString()] = convertMap(value);
-        } else if (value is List) {
-          newMap[key.toString()] = value
-              .map((e) => e is Map ? convertMap(e) : e)
-              .toList();
-        } else {
-          newMap[key.toString()] = value;
-        }
-      });
-      return newMap;
-    }
+  if (data != null) return data;
 
-    final mapData = convertMap(data as Map);
-    return ChessGraph.fromMap(mapData);
-  } else {
-    // Nodo root iniziale vuoto
-    final root = PositionNode(id: 'root', fen: 'start', depth: 0);
-    return ChessGraph(rootNodeId: 'root', nodes: {'root': root});
-  }
+  // fallback: nuovo utente con grafo vuoto
+  return UserData(
+    userGraphData: UserGraphData(
+      globalGraph: ChessGraph(
+        rootNodeId: 'root',
+        nodes: {
+          "root": PositionNode(
+            id: "root",
+            fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+            depth: 0,
+          ),
+        },
+      ),
+    ),
+    preferredExplorations: [],
+  );
+}
+
+/// ----------------------
+/// Helper per accesso diretto a sezioni interne
+/// ----------------------
+
+Future<UserGraphData> loadUserGraphData() async {
+  final userData = await loadUserData();
+  return userData.userGraphData;
+}
+
+Future<List<String>> loadPreferredExplorations() async {
+  final userData = await loadUserData();
+  return userData.preferredExplorations;
+}
+
+/// ----------------------
+/// Operazioni di aggiornamento parziale
+/// ----------------------
+
+Future<void> saveUserGraphData(UserGraphData graph) async {
+  final userData = await loadUserData();
+  final updated = userData.copyWith(userGraph: graph);
+  await saveUserData(updated);
+}
+
+Future<void> addExploration(Exploration exploration) async {
+  final userData = await loadUserData();
+  // Rimuovo eventuale duplicato per ID uguale
+  final updatedExplorations = [
+    ...userData.userGraphData.explorations.where((e) => e.id != exploration.id),
+    exploration,
+  ];
+  final updatedGraph = userData.userGraphData.copyWith(
+    explorations: updatedExplorations,
+  );
+  final updatedUserData = userData.copyWith(userGraph: updatedGraph);
+  await saveUserData(updatedUserData);
+}
+
+Future<List<Exploration>> loadExplorations() async {
+  final userData = await loadUserData();
+  return userData.userGraphData.explorations;
+}
+
+Future<void> deleteExploration(String id) async {
+  final userData = await loadUserData();
+  final updatedGraph = userData.userGraphData.copyWith(
+    explorations: userData.userGraphData.explorations
+        .where((e) => e.id != id)
+        .toList(),
+  );
+  final updated = userData.copyWith(userGraph: updatedGraph);
+  await saveUserData(updated);
+}
+
+Future<void> toggleFavoriteExploration(String id) async {
+  final userData = await loadUserData();
+  final isFav = userData.preferredExplorations.contains(id);
+
+  final updated = userData.copyWith(
+    preferredExplorations: isFav
+        ? userData.preferredExplorations.where((e) => e != id).toList()
+        : [...userData.preferredExplorations, id],
+  );
+
+  await saveUserData(updated);
 }

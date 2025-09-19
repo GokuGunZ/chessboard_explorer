@@ -1,11 +1,19 @@
-// position_node.dart
+import 'package:hive/hive.dart';
 import 'edge.dart';
 
+part 'position_node.g.dart';
+
+@HiveType(typeId: 21)
 class PositionNode {
+  @HiveField(0)
   final String id;
+  @HiveField(1)
   final String fen;
+  @HiveField(2)
   final int depth;
+  @HiveField(3)
   final List<Edge> incomingEdges;
+  @HiveField(4)
   final List<Edge> outgoingEdges;
 
   PositionNode({
